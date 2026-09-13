@@ -117,4 +117,4 @@ Next steps
 - :doc:`../recipes` — “How do I…?” index
 - Long runs / resume / multi-GPU: :doc:`training`
 - Full motion libraries: :doc:`../data`
-- Add your robot: :doc:`../extensions/index`
+- Add your robot: :ref:`first-run-extension`

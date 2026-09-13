@@ -7,8 +7,9 @@ Motion libraries for WBC tracking live under **`data/<robot>/<dataset_name>/`**.
 
 .. tip::
 
-   First time? Convert the bundled samples and train with ``Wbc-G1`` — see
-   :doc:`workflows/quickstart`. Errors like empty ``npz/``:
+   First time on **G1**? Convert the bundled samples and train with ``Wbc-G1`` —
+   see :doc:`workflows/quickstart`. New robot? Scaffold an extension, retarget,
+   then convert — :ref:`first-run-extension`. Errors like empty ``npz/``:
    :doc:`troubleshooting`.
 
 A small **`samples/`** folder is version-controlled under each robot (e.g.

@@ -91,6 +91,9 @@ One registered task:
 End-to-end commands
 -------------------
 
+Same loop as :ref:`first-run-extension`, with H2 ids. Put retargeted CSV/PKL under
+``data/h2/<dataset>/`` (see :doc:`../data`), then:
+
 .. tab-set::
 
    .. tab-item:: uv
@@ -98,6 +101,7 @@ End-to-end commands
       .. code-block:: bash
 
          uv run wbc-mjlab-data-to-npz --robot h2 --dataset samples --batch-size 6
+         uv run wbc-mjlab-data-vis --robot h2 --dataset samples    # optional preview
          uv run wbc-mjlab-train --task Wbc-H2 --dataset samples
          uv run wbc-mjlab-play --task Wbc-H2 --dataset samples --viewer viser
 
@@ -106,6 +110,7 @@ End-to-end commands
       .. code-block:: bash
 
          wbc-mjlab-data-to-npz --robot h2 --dataset samples --batch-size 6
+         wbc-mjlab-data-vis --robot h2 --dataset samples
          wbc-mjlab-train --task Wbc-H2 --dataset samples
          wbc-mjlab-play --task Wbc-H2 --dataset samples --viewer viser
 
@@ -127,10 +132,11 @@ Adapting for your robot
    * - ``H2_ACTION_SCALE``, actuators
      - Your motor model
    * - ``robot_id="h2"``, ``Wbc-H2``
-     - Your ids (``mybot``, ``Wbc-Mybot``)
+     - Your ids (``my_amazing_robot``, ``Wbc-MyAmazingRobot``)
    * - ``data/h2/``
      - ``data/<your_robot_id>/``
 
 Keep ``apply_wbc`` (or other core presets) unchanged — only pass your body name tuples.
+Then follow :ref:`first-run-extension` (retarget → ``data-to-npz`` → train).
 
 Related: :doc:`extensions`, :doc:`robot_entity`, :doc:`../tasks/index`.

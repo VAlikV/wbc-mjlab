@@ -57,7 +57,9 @@ a **specific registered robot** — not global env forks.
 Build your own
 --------------
 
-Step-by-step extension layout, ``WbcRobotSpec``, and H2 reference walkthrough:
+End-to-end first run (retarget → convert → train): :ref:`first-run-extension`.
+
+Layout, ``WbcRobotSpec``, and H2 reference walkthrough:
 
 - :doc:`../extensions/index`
 - :doc:`../extensions/extensions`

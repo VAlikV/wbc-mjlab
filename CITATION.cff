@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: "If you use WBC-MJLab, please cite the software and mjlab."
 title: "WBC-MJLab: Unified Whole-Body Motion Tracking on mjlab"
-version: 0.0.4
-date-released: 2026-07-04
+version: 0.0.6
+date-released: 2026-09-13
 license: Apache-2.0
 repository-code: "https://github.com/wbc-mjlab/wbc-mjlab"
 url: "https://github.com/wbc-mjlab/wbc-mjlab"

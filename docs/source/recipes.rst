@@ -27,8 +27,8 @@ Short answers to common goals. Each link jumps to the full guide.
      - :doc:`data`
    * - **Visualize motion NPZ or RSI bins**
      - :doc:`visualization`
-   * - **Add a new robot (extension package)**
-     - :doc:`extensions/index` · :doc:`api/extension`
+   * - **Add a new robot (extension → retarget → train)**
+     - :ref:`first-run-extension` · :doc:`extensions/example_extension`
    * - **Add a paper-style task / preset**
      - :doc:`tasks/index` · :doc:`api/presets`
    * - **Look up observation term sizes**

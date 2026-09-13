@@ -41,35 +41,83 @@ Before opening a PR or publishing an extension, confirm:
 5. **Tasks registered** — ``WbcTaskConfig`` with matching ``robot_id``
 6. **Entry point** — ``[project.entry-points."mjlab.tasks"]`` so mjlab discovers the package
 
-Workflow
---------
+.. _first-run-extension:
 
-.. code-block:: bash
+First run: extension → retarget → train
+---------------------------------------
 
-   # 1. Scaffold extension (separate repo)
-   # 2. Implement <robot>_base_cfg + register_wbc_extension
+The loop is **scaffold the robot → retarget clips → convert NPZ → preview → train**.
+Core G1 uses ``data/g1/`` in this repo; your robot uses ``data/<robot_id>/`` under
+the extension ``project_root``.
 
-Install the extension editable alongside wbc-mjlab:
+This walkthrough uses a fictional robot ``my_amazing_robot`` and dataset
+``my_amazing_data``. Swap those names for yours. With pip, omit ``uv run`` after
+the package is installed in the active venv.
 
-.. tab-set::
+1. **Create an extension** for the robot, following
+   `wbc-mjlab-extension-h2 <https://github.com/wbc-mjlab/wbc-mjlab-extension-h2>`_
+   (layout, ``register_wbc_extension``, ``mjlab.tasks`` entry point). See
+   :doc:`example_extension` and :doc:`extensions`. Install it editable next to
+   wbc-mjlab so ``--robot`` / ``--task`` resolve:
 
-   .. tab-item:: uv
+   .. tab-set::
 
-      .. code-block:: bash
+      .. tab-item:: uv
 
-         uv pip install -e ../my-robot-wbc
-         uv run wbc-mjlab-list-envs          # should list Wbc-<Robot>
-         uv run wbc-mjlab-data-to-npz --robot <id> --dataset samples --batch-size 8
-         uv run wbc-mjlab-train --task Wbc-<Robot> --dataset samples
+         .. code-block:: bash
 
-   .. tab-item:: pip
+            uv pip install -e ../my-amazing-robot-wbc
+            uv run wbc-mjlab-list-envs    # should list Wbc-MyAmazingRobot
 
-      .. code-block:: bash
+      .. tab-item:: pip
 
-         pip install -e ../my-robot-wbc
-         wbc-mjlab-list-envs                   # should list Wbc-<Robot>
-         wbc-mjlab-data-to-npz --robot <id> --dataset samples --batch-size 8
-         wbc-mjlab-train --task Wbc-<Robot> --dataset samples
+         .. code-block:: bash
+
+            pip install -e ../my-amazing-robot-wbc
+            wbc-mjlab-list-envs           # should list Wbc-MyAmazingRobot
+
+2. **Retarget** source motion onto the robot with any tool you like — for example
+   `GMR <https://github.com/YanjieZe/GMR>`_. Drop the result as CSV or GMR PKL.
+   Supported layouts: :doc:`../data` (Supported formats).
+
+3. **Put the retargeted clips** in the extension data tree:
+
+   .. code-block:: text
+
+      <project_root>/data/my_amazing_robot/my_amazing_data/
+        walk.csv          # or .pkl — dataset folder or raw/
+
+4. **Convert to the wbc-mjlab NPZ** used by training. This runs forward kinematics
+   on the robot model and writes body poses and velocities (the kinematics
+   imitation rewards and observations consume):
+
+   .. code-block:: bash
+
+      uv run wbc-mjlab-data-to-npz --robot my_amazing_robot --dataset my_amazing_data --batch-size 8
+
+   Output: ``data/my_amazing_robot/my_amazing_data/npz/<clip>.npz``.
+   ``--robot`` selects the entity + FK scene; ``--task`` is not used here.
+
+5. **Optional — preview clips** in Viser before spending a GPU night:
+
+   .. code-block:: bash
+
+      uv run wbc-mjlab-data-vis --robot my_amazing_robot --dataset my_amazing_data
+
+6. **Train** when the trajectories look right:
+
+   .. code-block:: bash
+
+      uv run wbc-mjlab-train --task Wbc-MyAmazingRobot --dataset my_amazing_data
+
+   Play / export the last run:
+
+   .. code-block:: bash
+
+      uv run wbc-mjlab-play --task Wbc-MyAmazingRobot --dataset my_amazing_data --viewer viser
+
+``--dataset <name>`` resolves to ``data/<robot_id>/<name>/npz/``. Conversion needs
+``--robot``; train and play use ``--task`` (robot inferred from the task).
 
 .. toctree::
    :maxdepth: 1
