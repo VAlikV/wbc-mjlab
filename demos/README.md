@@ -27,6 +27,6 @@ uv run wbc-mjlab-play --task Wbc-G1 --dataset samples \
 
 | File | Source |
 |------|--------|
-| `demos/wbc_g1/model.pt` | `Wbc-G1` training on samples + LAFAN/SEED mix (`model_140000.pt` from local run) |
+| `demos/wbc_g1/model.pt` | `Wbc-G1` training on samples + LAFAN/SEED mix (`model_349999.pt` from `logs/rsl_rl/wbc_g1/2026-07-15_11-38-15`) |
 
 More checkpoints may move to Git LFS later.
