@@ -22,7 +22,7 @@ DEFAULT_G1_TASK_ID = "Wbc-G1"
 
 
 def g1_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
-  cfg = g1_base_cfg()
+  cfg = g1_base_cfg(use_random_terrain=False)
   apply_wbc(
     cfg,
     motion_body_names=G1_MOTION_BODY_NAMES,
@@ -30,6 +30,15 @@ def g1_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
   )
   return cfg
 
+def g1_wbc_terrain_env_cfg():
+  cfg = g1_base_cfg(use_random_terrain=True)
+
+  apply_wbc(
+    cfg,
+    motion_body_names=G1_MOTION_BODY_NAMES,
+    ee_termination_bodies=G1_EE_TERMINATION_BODY_NAMES,
+  )
+  return cfg
 
 def g1_wbc_se_env_cfg() -> ManagerBasedRlEnvCfg:
   cfg = g1_wbc_env_cfg()
@@ -83,6 +92,13 @@ G1_WBC_TASKS: tuple[WbcTaskConfig, ...] = (
     ),
     experiment_name="wbc_g1",
     build_env_cfg=g1_wbc_env_cfg,
+  ),
+  WbcTaskConfig(
+    task_id="Wbc-G1-Terrain",
+    robot_id="g1",
+    description="WBC G1 with procedural terrain and height-map observations.",
+    experiment_name="wbc_g1_terrain",
+    build_env_cfg=g1_wbc_terrain_env_cfg,
   ),
   WbcTaskConfig(
     task_id="Wbc-G1-SE",

@@ -20,8 +20,10 @@ from mjlab.managers.termination_manager import TerminationTermCfg
 from mjlab.scene import SceneCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.terrains import TerrainEntityCfg
+from mjlab.terrains.terrain_generator import TerrainGeneratorCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
+import mjlab.terrains as terrain_gen
 
 from wbc_mjlab.env.mdp.assistive_wrench import AssistiveWrenchEvent
 from wbc_mjlab.env.mdp.commands import MotionCommandCfg
@@ -76,6 +78,7 @@ ASSISTIVE_ETA = 0.8
 
 def make_base_wbc_env_cfg(
   use_reference_residual_action: bool = True,
+  use_random_terrain: bool = True,
 ) -> ManagerBasedRlEnvCfg:
   """Robot-agnostic WBC env template with all manager term slots pre-populated.
 
@@ -88,6 +91,60 @@ def make_base_wbc_env_cfg(
       :class:`~wbc_mjlab.env.mdp.actions.ReferenceJointPositionActionCfg`;
       otherwise mjlab absolute joint-position actions.
   """
+
+  if use_random_terrain:
+    terrain = TerrainEntityCfg(
+      terrain_type="generator",
+      terrain_generator=TerrainGeneratorCfg(
+        size=(15.0, 15.0),
+        num_rows=10,
+        border_width=20.0,
+        curriculum=True,
+        sub_terrains={
+          "flat": terrain_gen.BoxFlatTerrainCfg(proportion=0.2),
+          "rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=0.1,
+            noise_range=(0.01, 0.10),
+            noise_step=0.02,
+          ),
+          "perlin": terrain_gen.HfPerlinNoiseTerrainCfg(
+            height_range=(0.1, 0.8),
+            octaves=4,
+            persistence=0.5,
+            lacunarity=2.0,
+            scale=10.0,
+            horizontal_scale=0.1,
+            resolution=0.05,
+            base_thickness_ratio=1.0,
+            border_width=0.0,
+          ),
+          "rgrid": terrain_gen.BoxRandomGridTerrainCfg(
+            grid_width=0.5,
+            grid_height_range=(0.02, 0.10),
+            platform_width=0.5,
+            holes=False,
+            merge_similar_heights=True,
+            height_merge_threshold=0.05,
+            max_merge_distance=3,
+            border_width=0.25,
+          ),
+          "tgrid": terrain_gen.BoxTiltedGridTerrainCfg(
+            grid_width=0.5,
+            tilt_range_deg=15.0,
+            height_range=0.1,
+            platform_width=0.5,
+            border_width=0.25,
+            floor_depth=2.0,
+          ),
+        },
+      ),
+      max_init_terrain_level=5,
+    )
+  else:
+    terrain = TerrainEntityCfg(terrain_type="plane")
+
+  scene = SceneCfg(terrain=terrain, num_envs=8192)
+
   motion = {"command_name": _MOTION_COMMAND}
   # Non-SE actor: reference command + proprio only. SE measurements live in
   # ``apply_se_actor`` (``presets/se_actor.py``).
@@ -143,6 +200,13 @@ def make_base_wbc_env_cfg(
     ),
     "actions": ObservationTermCfg(func=mdp.last_action),
   }
+
+  if use_random_terrain:
+    actor_terms["height_map"] = ObservationTermCfg(
+      func=mdp.height_map,
+      params={"sensor_name": "terrain_scan"},
+      noise=Unoise(n_min=-0.05, n_max=0.05),
+    )
 
   # Critic: actor (no noise) + privileged keybody / contact features.
   critic_terms = {
@@ -463,7 +527,7 @@ def make_base_wbc_env_cfg(
   }
 
   return ManagerBasedRlEnvCfg(
-    scene=SceneCfg(terrain=TerrainEntityCfg(terrain_type="plane"), num_envs=8192),
+    scene=scene,
     observations=observations,
     actions=actions,
     commands=commands,
