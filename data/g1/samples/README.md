@@ -3,8 +3,8 @@
 A small, **version-controlled** subset of public retargeted G1 clips for smoke-testing
 convert, train, play, and `wbc-mjlab-data-vis` without downloading full datasets.
 
-**13 clips** ship as source CSV in this folder (8 from LAFAN1 retargeting, 5 from
-BONES-SEED). Run conversion once to populate `npz/`, then train or visualize:
+**10 clips** ship as source CSV in this folder (7 from LAFAN1 retargeting, 3 retargeted
+from video). Run conversion once to populate `npz/`, then train or visualize:
 
 ```bash
 uv run wbc-mjlab-data-to-npz --robot g1 --dataset samples
@@ -25,7 +25,7 @@ data/g1/samples/
 
 ## Bundled clips
 
-### LAFAN1 retarget (8 clips)
+### LAFAN1 retarget (7 clips)
 
 From [lvhaidong/LAFAN1_Retargeting_Dataset](https://huggingface.co/datasets/lvhaidong/LAFAN1_Retargeting_Dataset)
 — LAFAN1 mocap retargeted to Unitree G1, CSV @ 30 Hz.
@@ -40,25 +40,23 @@ From [lvhaidong/LAFAN1_Retargeting_Dataset](https://huggingface.co/datasets/lvha
 | `fight1_subject2.csv` | Fight / kick |
 | `fightAndSports1_subject1.csv` | Fight and sports combo |
 
-### BONES-SEED (5 clips)
+### Video retarget (3 clips)
 
-From [bones-studio/seed](https://huggingface.co/datasets/bones-studio/seed) — acrobatic
-flips retargeted to G1, stored in LAFAN-style CSV (no header, meters, quat xyzw,
-radians) after conversion from the native SEED header format.
+`dance.csv`, `gainer_flip.csv`, and `backflip.csv` are retargeted from video with
+GVHMR and UMR.
 
 | File | Motion |
 |------|--------|
-| `flip_090_001__A304.csv` | 90° flip |
-| `flip_090_002__A304.csv` | 90° flip (variant) |
-| `flip_090_003__A304_M.csv` | 90° flip (mirrored) |
-| `flip_360_009__A416.csv` | 360° flip |
-| `flip_360_011__A416.csv` | 360° flip (variant) |
+| `dance.csv` | Dance |
+| `gainer_flip.csv` | Gainer flip |
+| `backflip.csv` | Backflip |
 
-See [data/g1/README.md](../README.md) for full BONES-SEED download and conversion notes.
+The bundled checkpoint [`demos/wbc_g1/model.pt`](../../../demos/README.md) was trained
+on LAFAN1 and on BONES-SEED. The BONES-SEED motion files are not in this folder.
 
 ## Credits and licenses
 
-### LAFAN1 retargeting (8 clips)
+### LAFAN1 retargeting (7 clips)
 
 | | |
 |---|---|
@@ -72,20 +70,10 @@ no derivatives). The bundled clips are **unmodified subsets** for tutorial and
 reproducibility; for the full set or commercial use, download from Hugging Face and
 follow the dataset card.
 
-### BONES-SEED (5 clips)
+### Video retarget (3 clips)
 
-| | |
-|---|---|
-| **Dataset** | [bones-studio/seed](https://huggingface.co/datasets/bones-studio/seed) on Hugging Face |
-| **Publisher** | [Bones Studio](https://bones.studio/datasets/seed) |
-| **Format** | Unitree G1 CSV, LAFAN-style layout in this folder |
-
-BONES-SEED requires accepting the
-[dataset license](https://huggingface.co/datasets/bones-studio/seed) on Hugging Face
-before download. The samples here are a small excerpt; see `LICENSE.md` in the full
-dataset for terms. SOMA and G1 retargets in BONES-SEED were contributed with
-acknowledgment to NVIDIA (Kimodo project) — see the
-[dataset card](https://huggingface.co/datasets/bones-studio/seed).
+Recovered from video with GVHMR and retargeted to G1 with UMR: `dance.csv`,
+`gainer_flip.csv`, `backflip.csv`.
 
 ### This repository
 

@@ -36,7 +36,7 @@ uv run wbc-mjlab-list-envs
 
 `uv run` syncs from `uv.lock` on first use. For CUDA/CPU PyTorch and dev deps: `make sync` / `make sync-cpu`. See the [installation guide](https://wbc-mjlab.github.io/wbc-mjlab/source/installation.html).
 
-**Convert trajectory samples** (13 source CSVs [manifest & credits](data/g1/samples/README.md)) to npz - calculating FK for body targets, velocities etc:
+**Convert trajectory samples** (10 source CSVs [manifest & credits](data/g1/samples/README.md)) to npz - calculating FK for body targets, velocities etc:
 
 ```bash
 uv run wbc-mjlab-data-to-npz --robot g1 --dataset samples --batch-size 8

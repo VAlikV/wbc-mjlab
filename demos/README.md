@@ -27,6 +27,6 @@ uv run wbc-mjlab-play --task Wbc-G1 --dataset samples \
 
 | File | Source |
 |------|--------|
-| `demos/wbc_g1/model.pt` | `Wbc-G1` training on samples + LAFAN/SEED mix (`model_349999.pt` from `logs/rsl_rl/wbc_g1/2026-07-15_11-38-15`) |
+| `demos/wbc_g1/model.pt` | `Wbc-G1` trained on LAFAN1 and BONES-SEED (`model_349999.pt` from `logs/rsl_rl/wbc_g1/2026-07-15_11-38-15`). BONES-SEED clips are not in the repo. |
 
 More checkpoints may move to Git LFS later.
