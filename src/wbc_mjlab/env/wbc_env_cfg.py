@@ -5,12 +5,11 @@ Per-robot wiring lives in ``wbc_mjlab.robots.<id>.configs`` (registered via task
 
 from dataclasses import replace
 
+import mjlab.terrains as terrain_gen
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp import dr
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.action_manager import ActionTermCfg
-
-from wbc_mjlab.env.mdp.actions import ReferenceJointPositionActionCfg
 from mjlab.managers.command_manager import CommandTermCfg
 from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
@@ -23,13 +22,12 @@ from mjlab.terrains import TerrainEntityCfg
 from mjlab.terrains.terrain_generator import TerrainGeneratorCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
-import mjlab.terrains as terrain_gen
 
+import wbc_mjlab.env.mdp as mdp
+from wbc_mjlab.env.mdp.actions import ReferenceJointPositionActionCfg
 from wbc_mjlab.env.mdp.assistive_wrench import AssistiveWrenchEvent
 from wbc_mjlab.env.mdp.commands import MotionCommandCfg
 from wbc_mjlab.env.mdp.sampling import AdaptiveSimilarityTermCfg, RsiCfg
-
-import wbc_mjlab.env.mdp as mdp
 
 VELOCITY_RANGE = {
   "x": (-0.5, 0.5),
@@ -101,14 +99,16 @@ def make_base_wbc_env_cfg(
         border_width=20.0,
         curriculum=True,
         sub_terrains={
-          "flat": terrain_gen.BoxFlatTerrainCfg(proportion=0.2),
+          "flat": terrain_gen.BoxFlatTerrainCfg(proportion=0.25),
           "rough": terrain_gen.HfRandomUniformTerrainCfg(
-            proportion=0.1,
-            noise_range=(0.01, 0.10),
+            proportion=0.25,
+            noise_range=(0.0, 0.1),
             noise_step=0.02,
+            scale_with_difficulty=True,
           ),
           "perlin": terrain_gen.HfPerlinNoiseTerrainCfg(
-            height_range=(0.1, 0.8),
+            proportion=0.25,
+            height_range=(0.0, 0.25),
             octaves=4,
             persistence=0.5,
             lacunarity=2.0,
@@ -119,8 +119,9 @@ def make_base_wbc_env_cfg(
             border_width=0.0,
           ),
           "rgrid": terrain_gen.BoxRandomGridTerrainCfg(
+            proportion=0.25,
             grid_width=0.5,
-            grid_height_range=(0.02, 0.10),
+            grid_height_range=(0.0, 0.10),
             platform_width=0.5,
             holes=False,
             merge_similar_heights=True,
@@ -128,17 +129,18 @@ def make_base_wbc_env_cfg(
             max_merge_distance=3,
             border_width=0.25,
           ),
-          "tgrid": terrain_gen.BoxTiltedGridTerrainCfg(
-            grid_width=0.5,
-            tilt_range_deg=15.0,
-            height_range=0.1,
-            platform_width=0.5,
-            border_width=0.25,
-            floor_depth=2.0,
-          ),
+          # "tgrid": terrain_gen.BoxTiltedGridTerrainCfg(
+          #   proportion=0.3,
+          #   grid_width=0.5,
+          #   tilt_range_deg=10.0,
+          #   height_range=0.1,
+          #   platform_width=0.5,
+          #   border_width=0.25,
+          #   floor_depth=2.0,
+          # ),
         },
       ),
-      max_init_terrain_level=5,
+      max_init_terrain_level=0,
     )
   else:
     terrain = TerrainEntityCfg(terrain_type="plane")
@@ -201,12 +203,12 @@ def make_base_wbc_env_cfg(
     "actions": ObservationTermCfg(func=mdp.last_action),
   }
 
-  if use_random_terrain:
-    actor_terms["height_map"] = ObservationTermCfg(
-      func=mdp.height_map,
-      params={"sensor_name": "terrain_scan"},
-      noise=Unoise(n_min=-0.05, n_max=0.05),
-    )
+  # if use_random_terrain:
+  #   actor_terms["height_map"] = ObservationTermCfg(
+  #     func=mdp.height_map,
+  #     params={"sensor_name": "terrain_scan"},
+  #     noise=Unoise(n_min=-0.05, n_max=0.05),
+  #   )
 
   # Critic: actor (no noise) + privileged keybody / contact features.
   critic_terms = {

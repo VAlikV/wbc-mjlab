@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from mjlab.envs import ManagerBasedRlEnvCfg
+from mjlab.managers.curriculum_manager import CurriculumTermCfg
 
 from wbc_mjlab.env.mdp.commands import MotionCommandCfg
+from wbc_mjlab.env.mdp.curriculums import terrain_levels_motion
 from wbc_mjlab.presets.binary_failure import apply_binary_failure
 from wbc_mjlab.presets.end_effector import apply_end_effector
 from wbc_mjlab.presets.se_actor import apply_se_actor
@@ -30,6 +32,7 @@ def g1_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
   )
   return cfg
 
+
 def g1_wbc_terrain_env_cfg():
   cfg = g1_base_cfg(use_random_terrain=True)
 
@@ -38,7 +41,14 @@ def g1_wbc_terrain_env_cfg():
     motion_body_names=G1_MOTION_BODY_NAMES,
     ee_termination_bodies=G1_EE_TERMINATION_BODY_NAMES,
   )
+  cfg.curriculum["terrain_levels"] = CurriculumTermCfg(
+    func=terrain_levels_motion,
+  )
+  cfg.terminations["anchor_pos"].params["threshold"] = 0.5
+  cfg.terminations["ee_body_pos"].params["threshold"] = 0.4
+
   return cfg
+
 
 def g1_wbc_se_env_cfg() -> ManagerBasedRlEnvCfg:
   cfg = g1_wbc_env_cfg()
