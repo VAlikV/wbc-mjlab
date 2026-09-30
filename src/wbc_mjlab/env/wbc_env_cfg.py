@@ -203,12 +203,12 @@ def make_base_wbc_env_cfg(
     "actions": ObservationTermCfg(func=mdp.last_action),
   }
 
-  # if use_random_terrain:
-  #   actor_terms["height_map"] = ObservationTermCfg(
-  #     func=mdp.height_map,
-  #     params={"sensor_name": "terrain_scan"},
-  #     noise=Unoise(n_min=-0.05, n_max=0.05),
-  #   )
+  if use_random_terrain:
+    actor_terms["height_map"] = ObservationTermCfg(
+      func=mdp.height_map,
+      params={"sensor_name": "terrain_scan"},
+      noise=Unoise(n_min=-0.05, n_max=0.05),
+    )
 
   # Critic: actor (no noise) + privileged keybody / contact features.
   critic_terms = {
