@@ -40,9 +40,9 @@ def wire_g1_imu_sensors(cfg: ManagerBasedRlEnvCfg) -> None:
       lin_vel.params["sensor_name"] = G1_IMU_LIN_VEL_SENSOR
 
 
-def g1_base_cfg(use_random_terrain=False) -> ManagerBasedRlEnvCfg:
+def g1_base_cfg() -> ManagerBasedRlEnvCfg:
   """Shared WBC template + G1 scene, tracking bodies, and sensors."""
-  cfg = make_base_wbc_env_cfg(use_reference_residual_action=True, use_random_terrain=use_random_terrain)
+  cfg = make_base_wbc_env_cfg(use_reference_residual_action=True)
 
   cfg.scene.entities = {"robot": get_g1_robot_cfg()}
 
