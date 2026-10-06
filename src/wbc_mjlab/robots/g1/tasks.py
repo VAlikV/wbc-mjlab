@@ -2,29 +2,33 @@
 
 from __future__ import annotations
 
+import mjlab.terrains as terrain_gen
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers.curriculum_manager import CurriculumTermCfg
+from mjlab.managers.observation_manager import ObservationTermCfg
+from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
+from mjlab.terrains import TerrainEntityCfg
+from mjlab.terrains.terrain_generator import TerrainGeneratorCfg
+from mjlab.utils.noise import UniformNoiseCfg as Unoise
 
+import wbc_mjlab.env.mdp as mdp
 from wbc_mjlab.env.mdp.commands import MotionCommandCfg
 from wbc_mjlab.env.mdp.curriculums import terrain_levels_motion
+from wbc_mjlab.env.wbc_env_cfg import make_smp_wbc_env_cfg
 from wbc_mjlab.presets.binary_failure import apply_binary_failure
 from wbc_mjlab.presets.end_effector import apply_end_effector
 from wbc_mjlab.presets.se_actor import apply_se_actor
 from wbc_mjlab.presets.wbc import apply_wbc
 from wbc_mjlab.presets.zest import apply_zest
+from wbc_mjlab.robots.g1.actuators import G1_ACTION_SCALE
 from wbc_mjlab.robots.g1.base import g1_base_cfg, wire_g1_imu_sensors
 from wbc_mjlab.robots.g1.constants import (
   G1_EE_TERMINATION_BODY_NAMES,
   G1_ENDEFFECTOR_BODY_NAMES,
   G1_MOTION_BODY_NAMES,
+  get_g1_robot_cfg,
 )
 from wbc_mjlab.tasks.config import WbcTaskConfig
-import mjlab.terrains as terrain_gen
-from mjlab.terrains import TerrainEntityCfg
-from mjlab.terrains.terrain_generator import TerrainGeneratorCfg
-from mjlab.managers.observation_manager import ObservationTermCfg
-import wbc_mjlab.env.mdp as mdp
-from mjlab.utils.noise import UniformNoiseCfg as Unoise
 
 DEFAULT_G1_TASK_ID = "Wbc-G1"
 
@@ -39,7 +43,19 @@ def g1_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
   return cfg
 
 
-def g1_wbc_terrain_env_cfg():
+def g1_smp_env_cfg() -> ManagerBasedRlEnvCfg:
+  """G1 forward locomotion with velocity tracking and SMP style reward."""
+  cfg = make_smp_wbc_env_cfg()
+  cfg.scene.entities = {"robot": get_g1_robot_cfg()}
+  cfg.actions["joint_pos"].scale = G1_ACTION_SCALE
+  cfg.events["foot_friction"].params[
+    "asset_cfg"
+  ].geom_names = r"^(left|right)_foot[1-7]_collision$"
+  cfg.viewer.body_name = "torso_link"
+  return cfg
+
+
+def g1_wbc_terrain_env_cfg() -> ManagerBasedRlEnvCfg:
   cfg = g1_base_cfg()
 
   apply_wbc(
@@ -162,8 +178,14 @@ def g1_wbc_ee_se_env_cfg() -> ManagerBasedRlEnvCfg:
   wire_g1_imu_sensors(cfg)
   return cfg
 
-
 G1_WBC_TASKS: tuple[WbcTaskConfig, ...] = (
+  WbcTaskConfig(
+    task_id="Wbc-G1-SMP",
+    robot_id="g1",
+    description="Forward velocity tracking with a frozen SMP motion-style prior.",
+    experiment_name="wbc_g1_smp",
+    build_env_cfg=g1_smp_env_cfg,
+  ),
   WbcTaskConfig(
     task_id="Wbc-G1",
     robot_id="g1",
@@ -255,13 +277,18 @@ def make_g1_wbc_env_cfg(
     cfg.observations["actor"].enable_corruption = False
     cfg.curriculum = {}
     cfg.events.pop("push_robot", None)
-    motion_cmd = cfg.commands["motion"]
-    assert isinstance(motion_cmd, MotionCommandCfg)
-    motion_cmd.pose_range = {}
-    motion_cmd.velocity_range = {}
-    motion_cmd.assistive_wrench_enabled = False
-    if "assistive_wrench" in cfg.events:
-      cfg.events["assistive_wrench"].params["enabled"] = False
+    if "motion" in cfg.commands:
+      motion_cmd = cfg.commands["motion"]
+      assert isinstance(motion_cmd, MotionCommandCfg)
+      motion_cmd.pose_range = {}
+      motion_cmd.velocity_range = {}
+      motion_cmd.assistive_wrench_enabled = False
+      if "assistive_wrench" in cfg.events:
+        cfg.events["assistive_wrench"].params["enabled"] = False
+    elif "twist" in cfg.commands:
+      twist_cmd = cfg.commands["twist"]
+      assert isinstance(twist_cmd, UniformVelocityCommandCfg)
+      twist_cmd.debug_vis = True
 
   return cfg
 
@@ -271,6 +298,7 @@ __all__ = [
   "G1_TASK_BY_ID",
   "G1_WBC_TASKS",
   "get_g1_task_config",
+  "g1_smp_env_cfg",
   "g1_wbc_binary_failure_env_cfg",
   "g1_wbc_ee_env_cfg",
   "g1_wbc_ee_se_env_cfg",

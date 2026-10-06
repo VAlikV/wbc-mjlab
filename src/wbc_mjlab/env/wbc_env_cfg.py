@@ -74,7 +74,6 @@ ASSISTIVE_ETA = 0.8
 
 def make_base_wbc_env_cfg(
   use_reference_residual_action: bool = True,
-  use_random_terrain: bool = True,
 ) -> ManagerBasedRlEnvCfg:
   """Robot-agnostic WBC env template with all manager term slots pre-populated.
 
@@ -486,6 +485,226 @@ def make_base_wbc_env_cfg(
     sim=SimulationCfg(
       nconmax=64,
       njmax=250,
+      mujoco=MujocoCfg(timestep=0.005, iterations=10, ls_iterations=20),
+    ),
+    decimation=4,
+    episode_length_s=10.0,
+  )
+
+def make_smp_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
+  """Create a forward-walking task whose motion style is shaped by SMP."""
+  import math
+  from pathlib import Path
+
+  from mjlab.tasks.velocity import mdp as velocity_mdp
+  from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
+
+  from wbc_mjlab.smp.reward import SmpRewardTerm
+
+  terrain = TerrainEntityCfg(terrain_type="plane")
+  scene = SceneCfg(terrain=terrain, num_envs=8192)
+
+  # The policy receives only deployable proprioception and the desired body-frame
+  # velocity. No motion-reference or dataset features are part of the observation.
+  actor_terms = {
+    "base_lin_vel": ObservationTermCfg(
+      func=mdp.base_lin_vel,
+      noise=Unoise(n_min=-0.1, n_max=0.1),
+    ),
+    "base_ang_vel": ObservationTermCfg(
+      func=mdp.base_ang_vel,
+      noise=Unoise(n_min=-0.2, n_max=0.2),
+    ),
+    "projected_gravity": ObservationTermCfg(
+      func=mdp.projected_gravity,
+      noise=Unoise(n_min=-0.05, n_max=0.05),
+    ),
+    "joint_pos": ObservationTermCfg(
+      func=mdp.joint_pos_rel,
+      params={"biased": True},
+      noise=Unoise(n_min=-0.01, n_max=0.01),
+    ),
+    "joint_vel": ObservationTermCfg(
+      func=mdp.joint_vel_rel,
+      noise=Unoise(n_min=-1.5, n_max=1.5),
+    ),
+    "actions": ObservationTermCfg(func=mdp.last_action),
+    "command": ObservationTermCfg(
+      func=mdp.generated_commands,
+      params={"command_name": "twist"},
+    ),
+  }
+  critic_terms = {
+    **{
+      name: ObservationTermCfg(
+        func=term.func,
+        params=dict(term.params) if term.params else {},
+      )
+      for name, term in actor_terms.items()
+    },
+    # The critic sees the unbiased joint state; the actor keeps encoder noise.
+    "joint_pos": ObservationTermCfg(func=mdp.joint_pos_rel),
+  }
+  observations = {
+    "actor": ObservationGroupCfg(
+      terms=actor_terms,
+      concatenate_terms=True,
+      enable_corruption=True,
+    ),
+    "critic": ObservationGroupCfg(
+      terms=critic_terms,
+      concatenate_terms=True,
+      enable_corruption=False,
+    ),
+  }
+
+  actions: dict[str, ActionTermCfg] = {
+    "joint_pos": JointPositionActionCfg(
+      entity_name="robot",
+      actuator_names=(".*",),
+      scale=0.25,
+      use_default_offset=True,
+    )
+  }
+
+  # A fixed positive X command is the smallest useful locomotion task. Broaden
+  # lin_vel_x later when the policy can reliably walk at this speed.
+  commands: dict[str, CommandTermCfg] = {
+    "twist": UniformVelocityCommandCfg(
+      entity_name="robot",
+      resampling_time_range=(1.0e9, 1.0e9),
+      rel_standing_envs=0.05,
+      rel_heading_envs=0.0,
+      rel_world_envs=0.0,
+      rel_forward_envs=0.15,
+      heading_command=False,
+      debug_vis=True,
+      ranges=UniformVelocityCommandCfg.Ranges(
+        lin_vel_x=(0.3, 2.5),
+        lin_vel_y=(-0.5, 0.5),
+        ang_vel_z=(-1.0, 1.0),
+      ),
+    )
+  }
+
+  events: dict[str, EventTermCfg] = {
+    "reset_base": EventTermCfg(
+      func=mdp.reset_root_state_uniform,
+      mode="reset",
+      params={
+        "pose_range": {
+          "x": (-0.25, 0.25),
+          "y": (-0.25, 0.25),
+          "z": (0.0, 0.05),
+          "yaw": (-0.5, 0.5),
+        },
+        "velocity_range": {},
+      },
+    ),
+    "reset_robot_joints": EventTermCfg(
+      func=mdp.reset_joints_by_offset,
+      mode="reset",
+      params={
+        "position_range": (-0.05, 0.05),
+        "velocity_range": (0.0, 0.0),
+        "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+      },
+    ),
+    "encoder_bias": EventTermCfg(
+      mode="startup",
+      func=dr.encoder_bias,
+      params={"asset_cfg": SceneEntityCfg("robot"), "bias_range": (-0.01, 0.01)},
+    ),
+    "foot_friction": EventTermCfg(
+      mode="startup",
+      func=dr.geom_friction,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", geom_names=()),
+        "operation": "abs",
+        "ranges": (0.4, 1.2),
+        "shared_random": True,
+      },
+    ),
+  }
+
+  smp_dir = Path(__file__).resolve().parents[1] / "smp" / "checkpoint"
+  rewards: dict[str, RewardTermCfg] = {
+    "track_linear_velocity": RewardTermCfg(
+      func=velocity_mdp.track_linear_velocity,
+      weight=2.0,
+      params={"command_name": "twist", "std": math.sqrt(0.25)},
+    ),
+    "track_angular_velocity": RewardTermCfg(
+      func=velocity_mdp.track_angular_velocity,
+      weight=1.0,
+      params={"command_name": "twist", "std": math.sqrt(0.5)},
+    ),
+    "smp": RewardTermCfg(
+      func=SmpRewardTerm,
+      weight=2.0,
+      params={
+        "config_file": smp_dir / "diffusion_config.yaml",
+        "checkpoint_file": smp_dir / "model.pt",
+        "asset_cfg": SceneEntityCfg("robot"),
+        "sample_frequency": 30.0,
+        # Enable this after the runner updates and checkpoints SDSNormalizer.
+        "update_sds_stats": False,
+      },
+    ),
+    # "upright": RewardTermCfg(
+    #   func=velocity_mdp.upright,
+    #   weight=1.0,
+    #   params={
+    #     "std": math.sqrt(0.2),
+    #     "asset_cfg": SceneEntityCfg("robot", body_names=("torso_link",)),
+    #   },
+    # ),
+    "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.05),
+    "joint_acc": RewardTermCfg(
+      func=mdp.joint_acc_l1,
+      weight=-2.0e-6,
+      params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+    ),
+    "joint_limit": RewardTermCfg(
+      func=mdp.joint_pos_limits,
+      weight=-0.5,
+      params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+    ),
+    "survival": RewardTermCfg(func=mdp.is_alive, weight=1.0),
+  }
+
+  terminations: dict[str, TerminationTermCfg] = {
+    "time_out": TerminationTermCfg(func=mdp.time_out, time_out=True),
+    "fell_over": TerminationTermCfg(
+      func=mdp.bad_orientation,
+      params={"limit_angle": math.radians(60.0)},
+    ),
+    "base_height": TerminationTermCfg(
+      func=mdp.root_height_below_minimum,
+      params={"minimum_height": 0.45},
+    ),
+  }
+
+  return ManagerBasedRlEnvCfg(
+    scene=scene,
+    observations=observations,
+    actions=actions,
+    commands=commands,
+    events=events,
+    rewards=rewards,
+    terminations=terminations,
+    viewer=ViewerConfig(
+      origin_type=ViewerConfig.OriginType.ASSET_BODY,
+      entity_name="robot",
+      body_name="",
+      distance=2.8,
+      fovy=55.0,
+      elevation=-5.0,
+      azimuth=120.0,
+    ),
+    sim=SimulationCfg(
+      nconmax=256,
+      njmax=1024,
       mujoco=MujocoCfg(timestep=0.005, iterations=10, ls_iterations=20),
     ),
     decimation=4,

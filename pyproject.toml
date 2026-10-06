@@ -40,9 +40,11 @@ classifiers = [
   "Natural Language :: English",
 ]
 dependencies = [
+  "diffusers>=0.36.0",
   "mjlab>=1.6.0",
   # mediapy (mjlab dep) breaks on numpy 2.5+; keep in sync with mjlab.
   "numpy<2.5",
+  "pyyaml>=6.0",
 ]
 
 [project.urls]
@@ -72,6 +74,7 @@ dev = [
   "pre-commit>=4.3.0",
   "pytest>=8.0.0",
   "ruff>=0.14.14",
+  "tensorboard>=2.20.0",
 ]
 docs = [
   "sphinx>=8.1",

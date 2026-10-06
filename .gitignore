@@ -34,3 +34,5 @@ data/**
 # Local technical report (keep untracked until ready to publish)
 wbc_report/
 TODO
+
+src/wbc_mjlab/smp/checkpoint/samples/*
