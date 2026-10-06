@@ -74,7 +74,6 @@ ASSISTIVE_ETA = 0.8
 
 def make_base_wbc_env_cfg(
   use_reference_residual_action: bool = True,
-  use_random_terrain: bool = True,
 ) -> ManagerBasedRlEnvCfg:
   """Robot-agnostic WBC env template with all manager term slots pre-populated.
 
