@@ -70,6 +70,8 @@ Examples in this repo:
    * - **End-effector command** (``Wbc-G1-EE``, ``Wbc-G1-EE-SE``)
      - Actor replaces ``ref_joint_*`` with existing ``ref_body_pos`` /
        ``ref_body_ori``; critic keeps joint refs.
+   * - **Terrain height scan** (``Wbc-G1-Terrain-Scan``)
+     - Actor + critic add ``height_scan`` (pelvis grid clearance, offset + clipped)
    * - **Bundled command** (mjlab tracking, some deploy runtimes)
      - Single ``command`` vector instead of per-field ``ref_*`` terms
 
@@ -222,6 +224,8 @@ Preset changes to reference obs
    * - ``apply_end_effector`` (``Wbc-G1-EE``, ``Wbc-G1-EE-SE``)
      - Actor only: remove ``ref_joint_pos`` / ``ref_joint_vel``; add existing
        ``ref_body_pos`` / ``ref_body_ori``. Critic keeps joint refs.
+   * - ``apply_terrain_scan`` (``Wbc-G1-Terrain-Scan``)
+     - Actor + critic: add ``height_scan`` (dim = grid rays, 54 for G1)
    * - Default ``Wbc-G1-BinaryFailure``
      - Keeps full base actor including ``ref_joint_vel``
 

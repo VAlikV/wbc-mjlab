@@ -60,6 +60,9 @@ Available presets (core)
    * - ``apply_se_actor``
      - ``presets/se_actor.py``
      - Actor obs swap (compose on top of wbc/zest/end_effector)
+   * - ``apply_terrain_scan``
+     - ``presets/terrain.py``
+     - Curriculum terrain + actor height scan + terrain-aware terminations
 
 Preset → task map (in-tree example)
 -----------------------------------
@@ -92,6 +95,9 @@ Preset → task map (in-tree example)
    * - ``Wbc-G1-EE-SE``
      - ``apply_wbc`` → ``apply_end_effector`` → ``apply_se_actor`` + IMU
      - ``g1_wbc_ee_se_env_cfg``
+   * - ``Wbc-G1-Terrain-Scan``
+     - ``apply_wbc`` → ``apply_terrain_scan``
+     - ``g1_wbc_terrain_scan_env_cfg``
 
 Extension tasks (e.g. ``Wbc-H2``) use the same pattern — see
 :doc:`../extensions/extensions`.
@@ -343,6 +349,9 @@ Task guides (in-tree)
    * - ``Wbc-G1-EE-SE``
      - ``logs/rsl_rl/wbc_g1_ee_se/``
      - :doc:`wbc-g1-ee-se`
+   * - ``Wbc-G1-Terrain-Scan``
+     - ``logs/rsl_rl/wbc_g1_terrain_scan/``
+     - :doc:`wbc-g1-terrain-scan`
 
 .. toctree::
    :maxdepth: 1
@@ -355,6 +364,7 @@ Task guides (in-tree)
    wbc-g1-binary-failure
    wbc-g1-ee
    wbc-g1-ee-se
+   wbc-g1-terrain-scan
    adding
 
 Related: :doc:`adding`, :doc:`../mdp/index`, :doc:`../architecture`.

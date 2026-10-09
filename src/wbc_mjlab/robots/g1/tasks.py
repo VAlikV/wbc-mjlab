@@ -8,12 +8,15 @@ from wbc_mjlab.env.mdp.commands import MotionCommandCfg
 from wbc_mjlab.presets.binary_failure import apply_binary_failure
 from wbc_mjlab.presets.end_effector import apply_end_effector
 from wbc_mjlab.presets.se_actor import apply_se_actor
+from wbc_mjlab.presets.terrain import apply_terrain_scan
 from wbc_mjlab.presets.wbc import apply_wbc
 from wbc_mjlab.presets.zest import apply_zest
 from wbc_mjlab.robots.g1.base import g1_base_cfg, wire_g1_imu_sensors
 from wbc_mjlab.robots.g1.constants import (
   G1_EE_TERMINATION_BODY_NAMES,
   G1_ENDEFFECTOR_BODY_NAMES,
+  G1_HEIGHT_SCAN_BODY_NAME,
+  G1_HEIGHT_SCAN_OFFSET,
   G1_MOTION_BODY_NAMES,
 )
 from wbc_mjlab.tasks.config import WbcTaskConfig
@@ -26,6 +29,17 @@ def g1_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
   apply_wbc(
     cfg,
     motion_body_names=G1_MOTION_BODY_NAMES,
+    ee_termination_bodies=G1_EE_TERMINATION_BODY_NAMES,
+  )
+  return cfg
+
+
+def g1_wbc_terrain_scan_env_cfg() -> ManagerBasedRlEnvCfg:
+  cfg = g1_wbc_env_cfg()
+  apply_terrain_scan(
+    cfg,
+    scan_body_name=G1_HEIGHT_SCAN_BODY_NAME,
+    scan_offset=G1_HEIGHT_SCAN_OFFSET,
     ee_termination_bodies=G1_EE_TERMINATION_BODY_NAMES,
   )
   return cfg
@@ -83,6 +97,15 @@ G1_WBC_TASKS: tuple[WbcTaskConfig, ...] = (
     ),
     experiment_name="wbc_g1",
     build_env_cfg=g1_wbc_env_cfg,
+  ),
+  WbcTaskConfig(
+    task_id="Wbc-G1-Terrain-Scan",
+    robot_id="g1",
+    description=(
+      "Wbc-G1 on curriculum terrain + actor height scan; terrain-aware anchor/EE terminations."
+    ),
+    experiment_name="wbc_g1_terrain_scan",
+    build_env_cfg=g1_wbc_terrain_scan_env_cfg,
   ),
   WbcTaskConfig(
     task_id="Wbc-G1-SE",
@@ -166,6 +189,9 @@ def make_g1_wbc_env_cfg(
     motion_cmd.assistive_wrench_enabled = False
     if "assistive_wrench" in cfg.events:
       cfg.events["assistive_wrench"].params["enabled"] = False
+    if cfg.scene.terrain is not None and cfg.scene.terrain.terrain_type == "generator":
+      # No curriculum in play: spread envs over all difficulty rows.
+      cfg.scene.terrain.max_init_terrain_level = None
 
   return cfg
 
@@ -180,6 +206,7 @@ __all__ = [
   "g1_wbc_ee_se_env_cfg",
   "g1_wbc_env_cfg",
   "g1_wbc_se_env_cfg",
+  "g1_wbc_terrain_scan_env_cfg",
   "g1_wbc_zest_env_cfg",
   "g1_wbc_zest_se_env_cfg",
   "make_g1_wbc_env_cfg",

@@ -7,6 +7,7 @@ their own; training does not encode any particular deploy stack.
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -210,6 +211,33 @@ def _observation_params(
   return params
 
 
+def _height_scan_params(cfg: Any, term: Any) -> dict[str, Any]:
+  """Grid layout deploy needs to rebuild ``height_scan`` from an elevation map.
+
+  Rays are ordered x-major within each y row (``meshgrid(x, y, indexing="xy")``
+  flattened), x forward in the yaw-aligned frame; value is
+  ``clip(frame_z - terrain_z - offset, clip)``.
+  """
+  term_params = term.params
+  sensor = next(s for s in cfg.scene.sensors if s.name == term_params["sensor_name"])
+  pattern = sensor.pattern
+  if type(pattern).__name__ != "GridPatternCfg":
+    raise TypeError(f"height_scan export expects a grid pattern, got {type(pattern).__name__}")
+  res = float(pattern.resolution)
+  nx = int(math.floor(pattern.size[0] / res + 0.5)) + 1
+  ny = int(math.floor(pattern.size[1] / res + 0.5)) + 1
+  return {
+    "frame_body": sensor.frame.name,
+    "ray_alignment": sensor.ray_alignment,
+    "size": [float(v) for v in pattern.size],
+    "resolution": res,
+    "grid_shape_yx": [ny, nx],
+    "num_rays": nx * ny,
+    "offset": float(term_params.get("offset", 0.0)),
+    "clip": [float(v) for v in term_params.get("clip", (-1.0, 1.0))],
+  }
+
+
 def _build_robot_entity(cfg: Any):
   return cfg.scene.entities["robot"].build()
 
@@ -275,17 +303,22 @@ def build_wbc_tracking_params(
 
   actor_observations: dict[str, Any] = {}
   for name in actor_names:
-    dim = _observation_dim(
-      name,
-      joint_count=len(joint_names),
-      body_count=term_body_counts[name],
-    )
+    if name == "height_scan":
+      params = _height_scan_params(cfg, actor_terms[name])
+      dim = params["num_rays"]
+    else:
+      dim = _observation_dim(
+        name,
+        joint_count=len(joint_names),
+        body_count=term_body_counts[name],
+      )
+      params = _observation_params(
+        name, command_name=command_name, term=actor_terms[name]
+      )
     actor_observations[name] = {
       "dim": dim,
       "scale": [1.0] * dim,
-      "params": _observation_params(
-        name, command_name=command_name, term=actor_terms[name]
-      ),
+      "params": params,
     }
 
   stiffness, damping, default_pos = _pd_from_robot(cfg, joint_names)
