@@ -9,6 +9,8 @@ from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp import dr
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.action_manager import ActionTermCfg
+
+from wbc_mjlab.env.mdp.actions import ReferenceJointPositionActionCfg
 from mjlab.managers.command_manager import CommandTermCfg
 from mjlab.managers.event_manager import EventTermCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
@@ -21,11 +23,11 @@ from mjlab.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
 
-import wbc_mjlab.env.mdp as mdp
-from wbc_mjlab.env.mdp.actions import ReferenceJointPositionActionCfg
 from wbc_mjlab.env.mdp.assistive_wrench import AssistiveWrenchEvent
 from wbc_mjlab.env.mdp.commands import MotionCommandCfg
 from wbc_mjlab.env.mdp.sampling import AdaptiveSimilarityTermCfg, RsiCfg
+
+import wbc_mjlab.env.mdp as mdp
 
 VELOCITY_RANGE = {
   "x": (-0.5, 0.5),
@@ -86,11 +88,6 @@ def make_base_wbc_env_cfg(
       :class:`~wbc_mjlab.env.mdp.actions.ReferenceJointPositionActionCfg`;
       otherwise mjlab absolute joint-position actions.
   """
-
-  terrain = TerrainEntityCfg(terrain_type="plane")
-
-  scene = SceneCfg(terrain=terrain, num_envs=8192)
-
   motion = {"command_name": _MOTION_COMMAND}
   # Non-SE actor: reference command + proprio only. SE measurements live in
   # ``apply_se_actor`` (``presets/se_actor.py``).
@@ -466,7 +463,7 @@ def make_base_wbc_env_cfg(
   }
 
   return ManagerBasedRlEnvCfg(
-    scene=scene,
+    scene=SceneCfg(terrain=TerrainEntityCfg(terrain_type="plane"), num_envs=8192),
     observations=observations,
     actions=actions,
     commands=commands,

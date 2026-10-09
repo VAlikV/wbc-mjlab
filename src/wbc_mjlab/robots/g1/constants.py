@@ -147,6 +147,10 @@ G1_EE_TERMINATION_BODY_NAMES: tuple[str, ...] = (
 
 G1_ENDEFFECTOR_BODY_NAMES: tuple[str, ...] = G1_EE_TERMINATION_BODY_NAMES
 
+G1_HEIGHT_SCAN_BODY_NAME = "pelvis"
+G1_HEIGHT_SCAN_OFFSET = 0.78
+"""Nominal standing pelvis height (m); centers the height scan on flat ground."""
+
 G1_WRIST_BODY_NAMES: tuple[str, ...] = (
   "left_wrist_yaw_link",
   "right_wrist_yaw_link",

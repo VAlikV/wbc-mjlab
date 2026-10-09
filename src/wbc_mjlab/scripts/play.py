@@ -24,21 +24,18 @@ from __future__ import annotations
 import os
 import sys
 import time as _time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
-import mjlab
 import torch
-import tyro
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
 from mjlab.rl.exporter_utils import attach_metadata_to_onnx, get_base_metadata
 from mjlab.scripts.play import PlayConfig
 from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
 from mjlab.tasks.tracking.rl.runner import MotionTrackingOnPolicyRunner
-from mjlab.terrains import TerrainEntityCfg
 from mjlab.utils.os import get_wandb_checkpoint_path
 from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
@@ -49,12 +46,6 @@ from wbc_mjlab.deploy_paths import PLAY_PARAMS_SUBDIR, PLAY_POLICY_ONNX_NAME
 from wbc_mjlab.env.mdp.commands import MotionCommand, MotionCommandCfg
 from wbc_mjlab.rl.runner import PolicyOnlyMotionTrackingRunner
 from wbc_mjlab.viewer.viser_play import WbcViserPlayViewer
-
-
-@dataclass(frozen=True)
-class WbcPlayConfig(PlayConfig):
-  random_terrain: bool = False
-  """Use the configured procedural terrain; disable for a flat plane."""
 
 
 def _parse_wandb_dt(value: str | datetime) -> datetime:
@@ -459,14 +450,10 @@ def main() -> None:
             "Pass --checkpoint-file explicitly or use --agent zero/random."
           )
 
-  args = tyro.cli(
-    WbcPlayConfig,
-    args=sys.argv[2:],
-    default=WbcPlayConfig(),
-    prog=f"{prog} {task_id}",
-    config=mjlab.TYRO_FLAGS,
-  )
-  run_play(task_id, args)
+  import mjlab.scripts.play as mjlab_play
+
+  mjlab_play.run_play = run_play
+  mjlab_play.main()
 
 
 if __name__ == "__main__":

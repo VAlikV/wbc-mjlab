@@ -120,8 +120,22 @@ def ref_base_ang_acc_b(env: ManagerBasedRlEnv, command_name: str) -> torch.Tenso
   """Reference anchor angular acceleration in anchor frame (critic privileged)."""
   return _motion_command(env, command_name).ref_base_ang_acc_b
 
-def height_map(env: ManagerBasedRlEnv, sensor_name: str) -> torch.Tensor:
-  return torch.flatten(env.scene.sensors[sensor_name].data.heights, start_dim=1, end_dim=-1)
+
+def height_scan(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  offset: float = 0.0,
+  clip: tuple[float, float] = (-1.0, 1.0),
+) -> torch.Tensor:
+  """Flattened terrain height scan: per-ray frame clearance minus *offset*, clipped.
+
+  Reads a :class:`~mjlab.sensor.TerrainHeightSensor` with ``reduction="none"``.
+  Set *offset* to the nominal frame height so flat ground maps to ~0; misses
+  (``max_distance``) saturate at ``clip[1]``.
+  """
+  heights = env.scene.sensors[sensor_name].data.heights.flatten(start_dim=1)
+  return torch.clamp(heights - offset, clip[0], clip[1])
+
 
 # --- Critic privileged keybody / anchor-relative features ---
 

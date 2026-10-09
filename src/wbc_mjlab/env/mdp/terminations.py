@@ -99,6 +99,62 @@ def bad_motion_body_pos_z_only(
   return torch.any(error > threshold, dim=-1)
 
 
+def _clearance_by_body(
+  env: ManagerBasedRlEnv, sensor_name: str, body_names: tuple[str, ...]
+) -> torch.Tensor:
+  """Robot body clearance above terrain ``[B, len(body_names)]`` from a per-body
+  :class:`~mjlab.sensor.TerrainHeightSensor` (one frame per body, ``reduction="min"``)."""
+  sensor = env.scene[sensor_name]
+  frames = sensor.cfg.frame if isinstance(sensor.cfg.frame, tuple) else (sensor.cfg.frame,)
+  frame_names = [f.name for f in frames]
+  missing = [name for name in body_names if name not in frame_names]
+  if missing:
+    raise ValueError(f"Bodies {missing} are not frames of sensor {sensor_name!r}.")
+  idx = [frame_names.index(name) for name in body_names]
+  return sensor.data.heights[:, idx]
+
+
+def bad_anchor_pos_z_terrain(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+  sensor_name: str,
+  threshold: float,
+) -> torch.Tensor:
+  """Terrain-aware :func:`bad_anchor_pos_z_only`: compares clearances.
+
+  Reference clearance is anchor height above the env origin (mocap is
+  flat-ground); robot clearance is the anchor's height above the terrain under it.
+  """
+  command = cast(MotionCommand, env.command_manager.get_term(command_name))
+  ref_clearance = command.anchor_pos_w[:, 2] - env.scene.env_origins[:, 2]
+  robot_clearance = _clearance_by_body(
+    env, sensor_name, (command.cfg.anchor_body_name,)
+  )[:, 0]
+  return torch.abs(ref_clearance - robot_clearance) > threshold
+
+
+def bad_motion_body_pos_z_terrain(
+  env: ManagerBasedRlEnv,
+  command_name: str,
+  sensor_name: str,
+  threshold: float,
+  body_names: tuple[str, ...],
+) -> torch.Tensor:
+  """Terrain-aware :func:`bad_motion_body_pos_z_only`: compares clearances.
+
+  Reference clearance is height above the env origin (mocap is flat-ground);
+  robot clearance is read from *sensor_name* frames named after *body_names*.
+  """
+  command = cast(MotionCommand, env.command_manager.get_term(command_name))
+  body_indexes = _get_body_indexes(command, body_names)
+  ref_clearance = (
+    command.body_pos_relative_w[:, body_indexes, -1]
+    - env.scene.env_origins[:, None, 2]
+  )
+  robot_clearance = _clearance_by_body(env, sensor_name, body_names)
+  return torch.any(torch.abs(ref_clearance - robot_clearance) > threshold, dim=-1)
+
+
 def excessive_contact_force(
   env: ManagerBasedRlEnv,
   sensor_name: str,

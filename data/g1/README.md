@@ -3,8 +3,8 @@
 G1 datasets live in **`data/g1/<dataset_name>/`** (e.g. `lafan`, `seed`).  
 General layout and formats: [data/README.md](../README.md). CLI flags: [usage guide](https://wbc-mjlab.github.io/wbc-mjlab/source/usage.html).
 
-**Quick try:** bundled clips live in [`samples/`](samples/) (LAFAN1 + BONES-SEED
-excerpts). Use `--dataset samples` on train/play/vis — see
+**Quick try:** bundled clips live in [`samples/`](samples/) (LAFAN1 excerpts and
+three video retargets). Use `--dataset samples` on train/play/vis — see
 [samples/README.md](samples/README.md) for the manifest and credits.
 
 For full training runs, download from the Hugging Face links below or use your
@@ -47,9 +47,9 @@ LAFAN1 content: [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/
 
 **[bones-studio/seed](https://huggingface.co/datasets/bones-studio/seed)**
 
-Everyday human motion with **Unitree G1 CSV** at `g1/csv/{date}/{motion_name}.csv`. Accept the [BONES-SEED license](https://huggingface.co/datasets/bones-studio/seed) on Hugging Face before download.
+Everyday human motion with **Unitree G1 CSV** at `g1/csv/{date}/{motion_name}.csv`. Accept the [BONES-SEED license](https://huggingface.co/datasets/bones-studio/seed) on Hugging Face before download. This repository does not redistribute those files or retargets derived from them.
 
-The bundled CSV uses a BONE SEED header layout (cm, euler degrees, joint degrees). Convert to LAFAN-style CSV first (no header, meters, quat xyzw, radians), then run `wbc-mjlab-data-to-npz`.
+The official CSV uses a BONE SEED header layout (cm, euler degrees, joint degrees). Convert to LAFAN-style CSV first (no header, meters, quat xyzw, radians), then run `wbc-mjlab-data-to-npz`. Write the result under a local dataset folder such as `data/g1/seed/` (gitignored), not under `samples/`.
 
 ```bash
 huggingface-cli download bones-studio/seed \
@@ -106,7 +106,5 @@ uv run wbc-mjlab-play --task Wbc-G1 --motion-file /path/to/lafan_dance1_subject1
 data/g1/samples/
   README.md
   walk1_subject1.csv
-  flip_360_009__A416.csv
   npz/walk1_subject1.npz    # after wbc-mjlab-data-to-npz
-  npz/flip_360_009__A416.npz
 ```
