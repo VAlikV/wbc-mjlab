@@ -75,8 +75,8 @@ class WorldXyGoalCommand(CommandTerm):
     radius = torch.empty(n, device=self.device).uniform_(*self.cfg.distance_range)
     angle = torch.empty(n, device=self.device).uniform_(*self.cfg.angle_range)
     offset = radius[:, None] * torch.stack((angle.cos(), angle.sin()), dim=-1)
-    # Match temp_smp/location: sample around the current robot position.
-    self.goal_xy_w[env_ids] = self.robot.data.root_link_pos_w[env_ids, :2] + offset
+    # Sample around the current terrain tile origin, including curriculum moves.
+    self.goal_xy_w[env_ids] = self._env.scene.env_origins[env_ids, :2] + offset
 
   def _update_command(self, env_ids: torch.Tensor | None = None) -> None:
     ids = slice(None) if env_ids is None else env_ids
