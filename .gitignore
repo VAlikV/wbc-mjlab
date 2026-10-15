@@ -35,4 +35,5 @@ data/**
 wbc_report/
 TODO
 
-src/wbc_mjlab/smp/checkpoint/samples/*
+src/wbc_mjlab/smp/checkpoint*/samples/*
+temp_smp/*

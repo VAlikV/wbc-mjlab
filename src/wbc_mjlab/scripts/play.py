@@ -404,7 +404,7 @@ def run_play(task_id: str, cfg: PlayConfig) -> None:
       env,
       policy,
       checkpoint_manager=ckpt_manager,
-      task_id=task_id if is_tracking_task else None,
+      # task_id=task_id if is_tracking_task else None,
     ).run()
   else:
     raise RuntimeError(f"Unsupported viewer backend: {resolved_viewer}")

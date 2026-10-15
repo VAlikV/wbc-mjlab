@@ -491,15 +491,19 @@ def make_base_wbc_env_cfg(
     episode_length_s=10.0,
   )
 
-def make_smp_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
-  """Create a forward-walking task whose motion style is shaped by SMP."""
+def _make_legacy_smp_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
+  """Legacy 210-feature MimicKit SMP environment, kept for reference.
+
+  This implementation is intentionally disabled in the G1 task builder. The
+  public ``make_smp_wbc_env_cfg`` below uses the alternative ``temp_smp`` port.
+  """
   import math
   from pathlib import Path
 
   from mjlab.tasks.velocity import mdp as velocity_mdp
   from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 
-  from wbc_mjlab.smp.reward import SmpRewardTerm
+  from wbc_mjlab.smp.reward import TaskSmpProductTerm
 
   terrain = TerrainEntityCfg(terrain_type="plane")
   scene = SceneCfg(terrain=terrain, num_envs=8192)
@@ -580,7 +584,7 @@ def make_smp_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
       heading_command=False,
       debug_vis=True,
       ranges=UniformVelocityCommandCfg.Ranges(
-        lin_vel_x=(0.3, 2.5),
+        lin_vel_x=(0.5, 2.5),
         lin_vel_y=(-0.5, 0.5),
         ang_vel_z=(-1.0, 1.0),
       ),
@@ -627,22 +631,24 @@ def make_smp_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
   }
 
-  smp_dir = Path(__file__).resolve().parents[1] / "smp" / "checkpoint"
+  smp_dir = Path(__file__).resolve().parents[1] / "smp" / "checkpoint_1"
   rewards: dict[str, RewardTermCfg] = {
-    "track_linear_velocity": RewardTermCfg(
-      func=velocity_mdp.track_linear_velocity,
-      weight=2.0,
-      params={"command_name": "twist", "std": math.sqrt(0.25)},
-    ),
-    "track_angular_velocity": RewardTermCfg(
-      func=velocity_mdp.track_angular_velocity,
+    "task_smp_product": RewardTermCfg(
+      func=TaskSmpProductTerm,
       weight=1.0,
-      params={"command_name": "twist", "std": math.sqrt(0.5)},
-    ),
-    "smp": RewardTermCfg(
-      func=SmpRewardTerm,
-      weight=2.0,
       params={
+        "task_terms": (
+          (
+            velocity_mdp.track_linear_velocity,
+            2.0,
+            {"command_name": "twist", "std": math.sqrt(0.25)},
+          ),
+          (
+            velocity_mdp.track_angular_velocity,
+            1.0,
+            {"command_name": "twist", "std": math.sqrt(0.5)},
+          ),
+        ),
         "config_file": smp_dir / "diffusion_config.yaml",
         "checkpoint_file": smp_dir / "model.pt",
         "asset_cfg": SceneEntityCfg("robot"),
@@ -659,18 +665,18 @@ def make_smp_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
     #     "asset_cfg": SceneEntityCfg("robot", body_names=("torso_link",)),
     #   },
     # ),
-    "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.05),
-    "joint_acc": RewardTermCfg(
-      func=mdp.joint_acc_l1,
-      weight=-2.0e-6,
-      params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
-    ),
-    "joint_limit": RewardTermCfg(
-      func=mdp.joint_pos_limits,
-      weight=-0.5,
-      params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
-    ),
-    "survival": RewardTermCfg(func=mdp.is_alive, weight=1.0),
+    # "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.05),
+    # "joint_acc": RewardTermCfg(
+    #   func=mdp.joint_acc_l1,
+    #   weight=-2.0e-6,
+    #   params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+    # ),
+    # "joint_limit": RewardTermCfg(
+    #   func=mdp.joint_pos_limits,
+    #   weight=-0.5,
+    #   params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+    # ),
+    # "survival": RewardTermCfg(func=mdp.is_alive, weight=1.0),
   }
 
   terminations: dict[str, TerminationTermCfg] = {
@@ -709,4 +715,253 @@ def make_smp_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     decimation=4,
     episode_length_s=10.0,
+  )
+
+def make_smp_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
+  """Create world-XY goal navigation with the alternative SMP motion prior."""
+  import math
+  from pathlib import Path
+
+  from mjlab.sensor import ContactMatch, ContactSensorCfg
+  from mjlab.tasks.velocity.mdp import illegal_contact
+
+  from wbc_mjlab.smp.alternative import (
+    AlternativeTaskSmpProductTerm,
+    gsi_refresh,
+    gsi_reset,
+    init_smp_state,
+  )
+  from wbc_mjlab.smp.alternative.goal import (
+    WorldXyGoalCommandCfg,
+    goal_position_tracking,
+    goal_success,
+  )
+
+  terrain = TerrainEntityCfg(terrain_type="plane")
+  self_collision_cfg = ContactSensorCfg(
+    name="self_collision",
+    primary=ContactMatch(mode="subtree", pattern="pelvis", entity="robot"),
+    secondary=ContactMatch(mode="subtree", pattern="pelvis", entity="robot"),
+    fields=("found",),
+    reduce="none",
+    num_slots=1,
+  )
+  scene = SceneCfg(terrain=terrain, num_envs=8192, sensors=(self_collision_cfg,))
+
+  # Keep the original deployable policy interface. SMP maintains its own
+  # independent 10-frame, 59-feature motion buffer for the guidance reward.
+  actor_terms = {
+    "base_lin_vel": ObservationTermCfg(
+      func=mdp.base_lin_vel,
+      noise=Unoise(n_min=-0.1, n_max=0.1),
+    ),
+    "base_ang_vel": ObservationTermCfg(
+      func=mdp.base_ang_vel,
+      noise=Unoise(n_min=-0.2, n_max=0.2),
+    ),
+    "projected_gravity": ObservationTermCfg(
+      func=mdp.projected_gravity,
+      noise=Unoise(n_min=-0.05, n_max=0.05),
+    ),
+    "joint_pos": ObservationTermCfg(
+      func=mdp.joint_pos_rel,
+      params={"biased": True},
+      noise=Unoise(n_min=-0.01, n_max=0.01),
+    ),
+    "joint_vel": ObservationTermCfg(
+      func=mdp.joint_vel_rel,
+      noise=Unoise(n_min=-1.5, n_max=1.5),
+    ),
+    "actions": ObservationTermCfg(func=mdp.last_action),
+    "command": ObservationTermCfg(
+      func=mdp.generated_commands,
+      params={"command_name": "xy_goal"},
+    ),
+  }
+  critic_terms = {
+    **{
+      name: ObservationTermCfg(
+        func=term.func,
+        params=dict(term.params) if term.params else {},
+      )
+      for name, term in actor_terms.items()
+    },
+    "joint_pos": ObservationTermCfg(func=mdp.joint_pos_rel),
+  }
+  observations = {
+    "actor": ObservationGroupCfg(
+      terms=actor_terms,
+      concatenate_terms=True,
+      enable_corruption=True,
+    ),
+    "critic": ObservationGroupCfg(
+      terms=critic_terms,
+      concatenate_terms=True,
+      enable_corruption=False,
+    ),
+  }
+
+  actions: dict[str, ActionTermCfg] = {
+    "joint_pos": JointPositionActionCfg(
+      entity_name="robot",
+      actuator_names=(".*",),
+      scale=0.25,
+      use_default_offset=True,
+    )
+  }
+
+  # Previous velocity command, kept for reference.
+  # from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
+  # commands: dict[str, CommandTermCfg] = {
+  #   "twist": UniformVelocityCommandCfg(
+  #     entity_name="robot",
+  #     resampling_time_range=(1.0e9, 1.0e9),
+  #     rel_standing_envs=0.05,
+  #     rel_heading_envs=0.0,
+  #     rel_world_envs=0.0,
+  #     rel_forward_envs=0.15,
+  #     heading_command=False,
+  #     debug_vis=True,
+  #     ranges=UniformVelocityCommandCfg.Ranges(
+  #       lin_vel_x=(2.5, 2.5),
+  #       lin_vel_y=(-0.5, 0.5),
+  #       ang_vel_z=(-1.0, 1.0),
+  #     ),
+  #   )
+  # }
+  commands: dict[str, CommandTermCfg] = {
+    "xy_goal": WorldXyGoalCommandCfg(
+      entity_name="robot",
+      resampling_time_range=(10.0, 15.0),
+      distance_range=(1.0, 5.0),
+      angle_range=(-math.pi, math.pi),
+      goal_radius=0.3,
+      debug_vis=True,
+    ),
+  }
+
+  checkpoint = (
+    Path(__file__).resolve().parents[1]
+    / "smp"
+    / "alternative"
+    / "pretrained_loco.pt"
+  )
+  events: dict[str, EventTermCfg] = {
+    # GSI replaces the legacy root/joint reset. It writes a generated final
+    # state to the simulator and primes the complete SMP history window.
+    "init_smp_state": EventTermCfg(
+      func=init_smp_state,
+      mode="startup",
+      params={
+        "ckpt_path": str(checkpoint),
+        "gsi_buffer_size": 4096,
+        "gsi_batch_size": 1024,
+        "compile_model": True,
+        "compile_mode": "max-autotune",
+      },
+    ),
+    "gsi_reset": EventTermCfg(func=gsi_reset, mode="reset", params={}),
+    "gsi_refresh": EventTermCfg(
+      func=gsi_refresh,
+      mode="step",
+      params={"num_samples": 1024, "step_interval": 2400},
+    ),
+    "encoder_bias": EventTermCfg(
+      mode="startup",
+      func=dr.encoder_bias,
+      params={"asset_cfg": SceneEntityCfg("robot"), "bias_range": (-0.01, 0.01)},
+    ),
+    "foot_friction": EventTermCfg(
+      mode="startup",
+      func=dr.geom_friction,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", geom_names=()),
+        "operation": "abs",
+        "ranges": (0.4, 1.2),
+        "shared_random": True,
+      },
+    ),
+  }
+
+  # Previous velocity rewards, kept for reference.
+  # from mjlab.tasks.velocity import mdp as velocity_mdp
+  # rewards: dict[str, RewardTermCfg] = {
+  #   "task_smp_product": RewardTermCfg(
+  #     func=AlternativeTaskSmpProductTerm,
+  #     weight=1.0,
+  #     params={
+  #       "task_terms": (
+  #         (
+  #           velocity_mdp.track_linear_velocity,
+  #           1.0,
+  #           {"command_name": "twist", "std": math.sqrt(0.25)},
+  #         ),
+  #         (
+  #           velocity_mdp.track_angular_velocity,
+  #           1.0,
+  #           {"command_name": "twist", "std": math.sqrt(0.5)},
+  #         ),
+  #       ),
+  #       "fixed_timesteps": (8, 15, 22),
+  #       "ws": 6.0,
+  #       "contact_sensor_name": "feet_ground_contact",
+  #     },
+  #   )
+  # }
+  rewards: dict[str, RewardTermCfg] = {
+    "task_smp_product": RewardTermCfg(
+      func=AlternativeTaskSmpProductTerm,
+      weight=1.0,
+      params={
+        "task_terms": (
+          (
+            goal_position_tracking,
+            1.0,
+            {"command_name": "xy_goal", "pos_err_scale": 0.25},
+          ),
+          (goal_success, 5.0, {"command_name": "xy_goal"}),
+        ),
+        "fixed_timesteps": (8, 15, 22),
+        "ws": 4.0,
+        "contact_sensor_name": "feet_ground_contact",
+      },
+    ),
+  }
+
+  terminations: dict[str, TerminationTermCfg] = {
+    "time_out": TerminationTermCfg(func=mdp.time_out, time_out=True),
+    "self_collision": TerminationTermCfg(
+      func=illegal_contact,
+      params={"sensor_name": "self_collision"},
+    ),
+    "base_height": TerminationTermCfg(
+      func=mdp.root_height_below_minimum,
+      params={"minimum_height": 0.3},
+    ),
+  }
+
+  return ManagerBasedRlEnvCfg(
+    scene=scene,
+    observations=observations,
+    actions=actions,
+    commands=commands,
+    events=events,
+    rewards=rewards,
+    terminations=terminations,
+    viewer=ViewerConfig(
+      origin_type=ViewerConfig.OriginType.ASSET_BODY,
+      entity_name="robot",
+      body_name="",
+      distance=2.8,
+      fovy=55.0,
+      elevation=-5.0,
+      azimuth=120.0,
+    ),
+    sim=SimulationCfg(
+      nconmax=256,
+      njmax=1024,
+      mujoco=MujocoCfg(timestep=0.005, iterations=10, ls_iterations=20),
+    ),
+    decimation=4,
+    episode_length_s=20.0,
   )

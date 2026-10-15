@@ -6,6 +6,14 @@ import mjlab.terrains as terrain_gen
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers.curriculum_manager import CurriculumTermCfg
 from mjlab.managers.observation_manager import ObservationTermCfg
+from mjlab.managers.termination_manager import TerminationTermCfg
+from mjlab.sensor import (
+  ContactMatch,
+  ContactSensorCfg,
+  GridPatternCfg,
+  ObjRef,
+  TerrainHeightSensorCfg,
+)
 from mjlab.tasks.velocity.mdp import UniformVelocityCommandCfg
 from mjlab.terrains import TerrainEntityCfg
 from mjlab.terrains.terrain_generator import TerrainGeneratorCfg
@@ -33,6 +41,38 @@ from wbc_mjlab.tasks.config import WbcTaskConfig
 DEFAULT_G1_TASK_ID = "Wbc-G1"
 
 
+def _wire_g1_smp_contact_sensor(cfg: ManagerBasedRlEnvCfg) -> None:
+  """Add ground-contact and sole-clearance sensors used by SMP diagnostics."""
+  feet_ground_cfg = ContactSensorCfg(
+    name="feet_ground_contact",
+    primary=ContactMatch(
+      mode="subtree",
+      pattern=r"^(left_ankle_roll_link|right_ankle_roll_link)$",
+      entity="robot",
+    ),
+    secondary=ContactMatch(mode="body", pattern="terrain"),
+    fields=("found", "force"),
+    reduce="netforce",
+    num_slots=1,
+    track_air_time=True,
+  )
+  sole_height_cfgs = tuple(
+    TerrainHeightSensorCfg(
+      name=f"{side}_foot_terrain_height",
+      frame=ObjRef(type="site", name=f"{side}_foot", entity="robot"),
+      ray_alignment="yaw",
+      reduction="min",
+      pattern=GridPatternCfg(size=(0.0, 0.0), resolution=0.25),
+      max_distance=5.0,
+      exclude_parent_body=True,
+      include_geom_groups=(0,),
+      debug_vis=False,
+    )
+    for side in ("left", "right")
+  )
+  cfg.scene.sensors = (*cfg.scene.sensors, feet_ground_cfg, *sole_height_cfgs)
+
+
 def g1_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
   cfg = g1_base_cfg()
   apply_wbc(
@@ -44,13 +84,14 @@ def g1_wbc_env_cfg() -> ManagerBasedRlEnvCfg:
 
 
 def g1_smp_env_cfg() -> ManagerBasedRlEnvCfg:
-  """G1 forward locomotion with velocity tracking and SMP style reward."""
+  """G1 world-XY goal navigation with an SMP style reward."""
   cfg = make_smp_wbc_env_cfg()
   cfg.scene.entities = {"robot": get_g1_robot_cfg()}
   cfg.actions["joint_pos"].scale = G1_ACTION_SCALE
   cfg.events["foot_friction"].params[
     "asset_cfg"
   ].geom_names = r"^(left|right)_foot[1-7]_collision$"
+  _wire_g1_smp_contact_sensor(cfg)
   cfg.viewer.body_name = "torso_link"
   return cfg
 
@@ -135,6 +176,134 @@ def g1_wbc_terrain_env_cfg() -> ManagerBasedRlEnvCfg:
 
   return cfg
 
+def g1_smp_terrain_env_cfg() -> ManagerBasedRlEnvCfg:
+  """G1 world-XY goal navigation with SMP style reward on random terrain."""
+  cfg = make_smp_wbc_env_cfg()
+  cfg.scene.entities = {"robot": get_g1_robot_cfg()}
+  cfg.actions["joint_pos"].scale = G1_ACTION_SCALE
+  cfg.events["foot_friction"].params[
+    "asset_cfg"
+  ].geom_names = r"^(left|right)_foot[1-7]_collision$"
+  _wire_g1_smp_contact_sensor(cfg)
+  cfg.viewer.body_name = "torso_link"
+
+  terrain_scan_cfg = TerrainHeightSensorCfg(
+    name="terrain_scan",
+    frame=ObjRef(type="body", name="pelvis", entity="robot"),
+    ray_alignment="yaw",
+    reduction="none",
+    pattern=GridPatternCfg(size=(1.6, 1.0), resolution=0.25),
+    max_distance=5.0,
+    exclude_parent_body=True,
+    include_geom_groups=(0,),
+    debug_vis=False,
+  )
+  root_terrain_height_cfg = TerrainHeightSensorCfg(
+    name="root_terrain_height",
+    frame=ObjRef(type="body", name="pelvis", entity="robot"),
+    ray_alignment="yaw",
+    reduction="min",
+    pattern=GridPatternCfg(size=(0.0, 0.0), resolution=0.25),
+    max_distance=5.0,
+    exclude_parent_body=True,
+    include_geom_groups=(0,),
+    debug_vis=False,
+  )
+  cfg.scene.sensors = (*cfg.scene.sensors, terrain_scan_cfg, root_terrain_height_cfg)
+
+  # Large box grids select SAP_SEGMENTED automatically in MJWarp. Its int32
+  # work-package scan can overflow across many worlds, skipping all collisions.
+  # NXN uses prefiltered pairs and avoids that global SAP scan.
+  cfg.sim.broadphase = "nxn"
+
+  cfg.scene.terrain = TerrainEntityCfg(
+    terrain_type="generator",
+    # collisions=(
+    #   CollisionCfg(
+    #     geom_names_expr=(r"^terrain.*",),
+    #     contype=1,
+    #     conaffinity=1,
+    #     condim=3,
+    #     priority=0,
+    #     friction=(0.8,),
+    #   ),
+    # ),
+    terrain_generator=TerrainGeneratorCfg(
+      size=(15.0, 15.0),
+      num_rows=10,
+      border_width=20.0,
+      curriculum=True,
+      sub_terrains={
+        "flat": terrain_gen.BoxFlatTerrainCfg(proportion=0.25),
+        "rough": terrain_gen.HfRandomUniformTerrainCfg(
+         proportion=0.25,
+         noise_range=(0.0, 0.1),
+         noise_step=0.02,
+         scale_with_difficulty=True,
+         horizontal_scale = 0.2,
+        ),
+        "perlin": terrain_gen.HfPerlinNoiseTerrainCfg(
+          proportion=0.25,
+          height_range=(0.0, 0.4),
+          octaves=4,
+          persistence=0.5,
+          lacunarity=2.0,
+          scale=10.0,
+          horizontal_scale=0.1,
+          resolution=0.1,
+          base_thickness_ratio=1.0,
+          border_width=0.0,
+        ),
+        "rgrid": terrain_gen.BoxRandomGridTerrainCfg(
+          proportion=0.25,
+          grid_width=0.5,
+          grid_height_range=(0.0, 0.10),
+          platform_width=1.5,
+          holes=False,
+          merge_similar_heights=True,
+          height_merge_threshold=0.05,
+          max_merge_distance=64,
+          border_width=0.25,
+        ),
+        # "tgrid": terrain_gen.BoxTiltedGridTerrainCfg(
+        #   proportion=0.2,
+        #   grid_width=0.5,
+        #   tilt_range_deg=10.0,
+        #   height_range=0.1,
+        #   platform_width=1.5,
+        #   border_width=0.25,
+        #   floor_depth=2.0,
+        # ),
+      },
+    ),
+    max_init_terrain_level=0,
+  )
+
+  cfg.observations["actor"].terms["height_map"] = ObservationTermCfg(
+    func=mdp.height_map,
+    params={"sensor_name": "terrain_scan"},
+    noise=Unoise(n_min=-0.05, n_max=0.05),
+  )
+
+  cfg.observations["critic"].terms["height_map"] = ObservationTermCfg(
+    func=mdp.height_map,
+    params={"sensor_name": "terrain_scan"},
+  )
+
+  cfg.curriculum["terrain_levels"] = CurriculumTermCfg(
+    func=terrain_levels_motion,
+    params={"goal_command_name": "xy_goal", "success_threshold": 0.5},
+  )
+
+  cfg.terminations["base_height"] = TerminationTermCfg(
+    func=mdp.root_height_above_terrain_below_minimum,
+    params={
+      "sensor_name": "root_terrain_height",
+      "minimum_height": 0.3,
+    },
+  )
+
+  return cfg
 
 def g1_wbc_se_env_cfg() -> ManagerBasedRlEnvCfg:
   cfg = g1_wbc_env_cfg()
@@ -182,9 +351,16 @@ G1_WBC_TASKS: tuple[WbcTaskConfig, ...] = (
   WbcTaskConfig(
     task_id="Wbc-G1-SMP",
     robot_id="g1",
-    description="Forward velocity tracking with a frozen SMP motion-style prior.",
+    description="World-frame XY goal navigation with a frozen SMP motion-style prior.",
     experiment_name="wbc_g1_smp",
     build_env_cfg=g1_smp_env_cfg,
+  ),
+  WbcTaskConfig(
+    task_id="Wbc-G1-SMP-Terrain",
+    robot_id="g1",
+    description="World-frame XY goal navigation with SMP on procedural terrain.",
+    experiment_name="wbc_g1_smp",
+    build_env_cfg=g1_smp_terrain_env_cfg,
   ),
   WbcTaskConfig(
     task_id="Wbc-G1",
@@ -277,6 +453,13 @@ def make_g1_wbc_env_cfg(
     cfg.observations["actor"].enable_corruption = False
     cfg.curriculum = {}
     cfg.events.pop("push_robot", None)
+    if "init_smp_state" in cfg.events:
+      # Match the alternative SMP play setup: avoid an expensive compile and
+      # use a smaller one-shot GSI pool without background regeneration.
+      cfg.events.pop("gsi_refresh", None)
+      cfg.events["init_smp_state"].params["compile_model"] = False
+      cfg.events["init_smp_state"].params["compile_mode"] = None
+      cfg.events["init_smp_state"].params["gsi_buffer_size"] = 1024
     if "motion" in cfg.commands:
       motion_cmd = cfg.commands["motion"]
       assert isinstance(motion_cmd, MotionCommandCfg)

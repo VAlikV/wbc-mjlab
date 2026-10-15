@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 import torch
-
 from mjlab.sensor import ContactSensor
 from mjlab.utils.lab_api.math import quat_apply_inverse
 
@@ -17,6 +16,24 @@ if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
   from mjlab.managers.scene_entity_config import SceneEntityCfg
 
+
+
+def root_height_above_terrain_below_minimum(
+  env: ManagerBasedRlEnv,
+  sensor_name: str,
+  minimum_height: float,
+) -> torch.Tensor:
+  """Terminate when root clearance above the terrain directly below is too low.
+
+  The terrain-height sensor is attached to the root body and reports
+  ``frame_z - terrain_hit_z``, so the check is independent of world height,
+  environment origin, and the height of the current terrain tile.
+  """
+  heights = env.scene.sensors[sensor_name].data.heights
+  # Support one or more frames/rays. The dedicated termination sensor uses a
+  # single downward ray, while amin keeps the function robust to extra axes.
+  clearance = heights.flatten(start_dim=1).amin(dim=1)
+  return clearance < minimum_height
 
 def bad_anchor_pos(
   env: ManagerBasedRlEnv, command_name: str, threshold: float

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +32,12 @@ _DEFAULT_KEY_BODY_NAMES = (
   "left_wrist_yaw_link",
   "right_wrist_yaw_link",
 )
+
+TaskRewardSpec = tuple[
+  Callable[..., torch.Tensor],
+  float,
+  Mapping[str, Any],
+]
 
 
 @dataclass
@@ -334,3 +341,67 @@ class SmpRewardTerm(ManagerTermBase):
 
     self._copy_state(self._previous, current, slice(None))
     return self._cached_reward
+
+
+class TaskSmpProductTerm(ManagerTermBase):
+  """Multiply a weighted sum of task rewards by the SMP style reward.
+
+  Regularization penalties should remain separate RewardManager terms. Putting a
+  negative penalty in ``task_terms`` would also scale that penalty by SMP.
+  """
+
+  def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRlEnv):
+    super().__init__(env)
+    raw_terms: Sequence[TaskRewardSpec] = cfg.params.get("task_terms", ())
+    if not raw_terms:
+      raise ValueError("TaskSmpProductTerm requires at least one task term")
+
+    self._task_terms: list[TaskRewardSpec] = []
+    for index, term in enumerate(raw_terms):
+      if len(term) != 3:
+        raise ValueError(
+          f"task_terms[{index}] must be (callable, weight, params), got {term!r}"
+        )
+      func, weight, params = term
+      if not callable(func):
+        raise TypeError(f"task_terms[{index}] function is not callable")
+      resolved_params = dict(params)
+      for value in resolved_params.values():
+        if isinstance(value, SceneEntityCfg):
+          value.resolve(env.scene)
+      self._task_terms.append((func, float(weight), resolved_params))
+
+    # SmpRewardTerm ignores the composite-only task_terms parameter.
+    self.smp = SmpRewardTerm(cfg=cfg, env=env)
+
+  @property
+  def prior(self) -> SMPPrior:
+    """Expose the prior for runner-side SDS normalization and checkpointing."""
+    return self.smp.prior
+
+  def reset(self, env_ids: torch.Tensor | slice | None) -> None:
+    """Reset the stateful SMP history for the selected environments."""
+    self.smp.reset(env_ids)
+
+  def __call__(self, env: ManagerBasedRlEnv, **_: Any) -> torch.Tensor:
+    """Return ``sum(task_weight * task_reward) * smp_reward`` per environment."""
+    task_reward = torch.zeros(self.num_envs, device=self.device)
+    for func, weight, params in self._task_terms:
+      value = func(env, **params)
+      if value.shape != (self.num_envs,):
+        raise ValueError(
+          f"Composite task reward returned {tuple(value.shape)}, "
+          f"expected ({self.num_envs},)"
+        )
+      task_reward += weight * value
+
+    smp_reward = self.smp(env)
+    product = task_reward * smp_reward
+
+    # These summaries make the two factors visible even though RewardManager sees
+    # the product as a single term.
+    log = env.extras.setdefault("log", {})
+    log["Metrics/task_reward"] = task_reward.mean()
+    log["Metrics/smp_reward"] = smp_reward.mean()
+    log["Metrics/task_smp_product"] = product.mean()
+    return product
